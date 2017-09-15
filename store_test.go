@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"testing"
+	"fmt"
 )
 
 type Cat struct {
@@ -39,7 +40,7 @@ func equal(a, b Settings) bool {
 }
 
 func TestSaveLoad(t *testing.T) {
-	Init("store_test")
+	//Init("store_test")
 
 	settings := Settings{
 		Age: 42,
@@ -51,19 +52,21 @@ func TestSaveLoad(t *testing.T) {
 		RandomString: "gophers are gonna conquer the world",
 	}
 
-	settingsFile := "path/to/preferences.toml"
+	path := "path/to"
+	name := "preferences.toml"
+	store := NewStore(path)
 
-	err := Save(settingsFile, &settings)
+	err := store.Save(name, &settings)
 	if err != nil {
 		t.Fatalf("failed to save preferences: %s\n", err)
 		return
 	}
 
-	defer os.Remove(buildPlatformPath(settingsFile))
+	defer os.Remove(path+name)
 
 	var newSettings Settings
 
-	err = Load(settingsFile, &newSettings)
+	err = store.Load(name, &newSettings)
 	if err != nil {
 		t.Fatalf("failed to load preferences: %s\n", err)
 		return
@@ -72,4 +75,5 @@ func TestSaveLoad(t *testing.T) {
 	if !equal(settings, newSettings) {
 		t.Fatalf("broken")
 	}
+	fmt.Println(store)
 }

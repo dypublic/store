@@ -9,10 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 
 	"github.com/BurntSushi/toml"
 	"gopkg.in/yaml.v2"
+	"errors"
+	"runtime"
 )
 
 // MarshalFunc is any marshaler.
@@ -46,14 +47,32 @@ func init() {
 	}
 }
 
-// Init sets up a unique application name that will be used for name of the
-// configuration directory on the file system. By default, Store puts all the
-// config data to to $XDG_CONFIG_HOME or $HOME on Linux systems
-// and to %APPDATA% on Windows.
-//
-// Beware: Store will panic on any sensitive calls unless you run Init inb4.
-func Init(application string) {
-	applicationName = application
+//// Init sets up a unique application name that will be used for name of the
+//// configuration directory on the file system. By default, Store puts all the
+//// config data to to $XDG_CONFIG_HOME or $HOME on Linux systems
+//// and to %APPDATA% on Windows.
+////
+//// Beware: Store will panic on any sensitive calls unless you run Init inb4.
+//func Init(application string) {
+//	applicationName = application
+//}
+
+type Store struct {
+	path string
+}
+
+func formatPath(path string) string {
+	if !os.IsPathSeparator(path[0]) {
+		path = buildPlatformPath(path)
+	}
+	if os.IsPathSeparator(path[len(path)-1]){
+		return path
+	}
+	return path+string(os.PathSeparator)
+}
+
+func NewStore(path string) *Store {
+	return &Store{formatPath(path)}
 }
 
 // Register is the way you register configuration formats, by mapping some
@@ -72,17 +91,12 @@ func Register(extension string, m MarshalFunc, um UnmarshalFunc) {
 // If `path` doesn't exist, Load will create one and emptify `v` pointer by
 // replacing it with a newly created object, derived from type of `v`.
 //
-// Load panics on unknown configuration formats.
-func Load(path string, v interface{}) error {
-	if applicationName == "" {
-		panic("store: application name not defined")
-	}
-
+func (s *Store) Load(name string, v interface{}) error {
+	path := s.path + name
 	if format, ok := formats[extension(path)]; ok {
 		return LoadWith(path, v, format.um)
 	}
-
-	panic("store: unknown configuration format")
+	return errors.New("store: unknown configuration format")
 }
 
 // Save puts a configuration from `v` pointer into a file `path`. Store
@@ -92,38 +106,27 @@ func Load(path string, v interface{}) error {
 //
 // Path is a full filename, including the file extension, e.g. "foobar.json".
 //
-// Save panics on unknown configuration formats.
-func Save(path string, v interface{}) error {
-	if applicationName == "" {
-		panic("store: application name not defined")
-	}
-
+func (s *Store) Save(name string, v interface{}) error {
+	path := s.path + name
 	if format, ok := formats[extension(path)]; ok {
 		return SaveWith(path, v, format.m)
 	}
-
-	panic("store: unknown configuration format")
+	return errors.New("store: unknown configuration format")
 }
 
 // LoadWith loads the configuration using any unmarshaler at all.
 func LoadWith(path string, v interface{}, um UnmarshalFunc) error {
-	if applicationName == "" {
-		panic("store: application name not defined")
-	}
-
-	globalPath := buildPlatformPath(path)
-
-	data, err := ioutil.ReadFile(globalPath)
+	data, err := ioutil.ReadFile(path)
 
 	if err != nil {
 		// There is a chance that file we are looking for
 		// just doesn't exist. In this case we are supposed
 		// to create an empty configuration file, based on v.
 		empty := reflect.New(reflect.TypeOf(v))
-		if innerErr := Save(path, &empty); innerErr != nil {
-			// Smth going on with the file system... returning error.
-			return err
-		}
+		//if innerErr := Save(path, &empty); innerErr != nil {
+		//	// Smth going on with the file system... returning error.
+		//	return err
+		//}
 
 		v = empty
 
@@ -139,10 +142,6 @@ func LoadWith(path string, v interface{}, um UnmarshalFunc) error {
 
 // SaveWith saves the configuration using any marshaler at all.
 func SaveWith(path string, v interface{}, m MarshalFunc) error {
-	if applicationName == "" {
-		panic("store: application name not defined")
-	}
-
 	var b bytes.Buffer
 
 	if data, err := m(v); err == nil {
@@ -153,12 +152,11 @@ func SaveWith(path string, v interface{}, m MarshalFunc) error {
 
 	b.WriteRune('\n')
 
-	globalPath := buildPlatformPath(path)
-	if err := os.MkdirAll(filepath.Dir(globalPath), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
 		return err
 	}
 
-	if err := ioutil.WriteFile(globalPath, b.Bytes(), os.ModePerm); err != nil {
+	if err := ioutil.WriteFile(path, b.Bytes(), os.ModePerm); err != nil {
 		return err
 	}
 
@@ -178,9 +176,7 @@ func extension(path string) string {
 // buildPlatformPath builds a platform-dependent path for relative path given.
 func buildPlatformPath(path string) string {
 	if runtime.GOOS == "windows" {
-		return fmt.Sprintf("%s\\%s\\%s", os.Getenv("APPDATA"),
-			applicationName,
-			path)
+		return fmt.Sprintf("%s\\%s", os.Getenv("APPDATA"), path)
 	}
 
 	var unixConfigDir string
@@ -190,12 +186,6 @@ func buildPlatformPath(path string) string {
 		unixConfigDir = os.Getenv("HOME") + "/.config"
 	}
 
-	return fmt.Sprintf("%s/%s/%s", unixConfigDir,
-		applicationName,
-		path)
+	return fmt.Sprintf("%s/%s", unixConfigDir, path)
 }
 
-// SetApplicationName is DEPRECATED (use Init instead).
-func SetApplicationName(handle string) {
-	applicationName = handle
-}
