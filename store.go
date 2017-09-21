@@ -175,17 +175,20 @@ func extension(path string) string {
 
 // buildPlatformPath builds a platform-dependent path for relative path given.
 func buildPlatformPath(path string) string {
-	if runtime.GOOS == "windows" {
-		return fmt.Sprintf("%s\\%s", os.Getenv("APPDATA"), path)
+	//if runtime.GOOS == "windows" {
+	//	return fmt.Sprintf("%s\\%s", os.Getenv("APPDATA"), path)
+	//}
+
+	if runtime.GOOS == "linux" {
+		prefix := ""
+		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+			prefix = xdg
+		} else {
+			prefix = os.Getenv("HOME") + "/.config"
+		}
+		return fmt.Sprintf("%s/%s", prefix, path)
 	}
 
-	var unixConfigDir string
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		unixConfigDir = xdg
-	} else {
-		unixConfigDir = os.Getenv("HOME") + "/.config"
-	}
-
-	return fmt.Sprintf("%s/%s", unixConfigDir, path)
+	return path
 }
 
